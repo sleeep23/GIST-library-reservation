@@ -8,5 +8,5 @@ dist/
 !.env.example
 *.har
 *.webarchive
-docs/
+docs/adr
 CONTEXT.md
