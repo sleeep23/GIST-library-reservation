@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.vercel/
+.env
+.env.*
+!.env.example
+*.har
+*.webarchive
+docs/
+CONTEXT.md
