@@ -1,5 +1,6 @@
 import express from "express";
-import { isYmd } from "./dateUtils";
+import { isYmd } from "../shared/dateUtils";
+import { reservableRooms } from "../shared/rooms";
 import {
   cancelReservation,
   getAvailability,
@@ -10,7 +11,6 @@ import {
   logout,
   makeReservation
 } from "./libraryClient";
-import { reservableRooms } from "./rooms";
 
 const isProduction = process.env.NODE_ENV === "production";
 const isVercel = process.env.VERCEL === "1";

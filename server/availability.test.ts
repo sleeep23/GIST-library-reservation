@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseRoomAvailability } from "./availability";
-import type { LibraryGetRoomResponse } from "./availability";
+import { parseRoomAvailability } from "../shared/availability";
+import type { LibraryGetRoomResponse } from "../shared/availability";
 import type { ReservableRoom } from "../shared/types";
 
 const room: ReservableRoom = {
@@ -11,6 +11,15 @@ const room: ReservableRoom = {
   floor: 2,
   group: "Small-sized Carrel",
   capacity: 1
+};
+
+const manualRequestOnlyRoom: ReservableRoom = {
+  id: 108,
+  roomNo: 108,
+  label: "1F Room 108",
+  floor: 1,
+  group: "Mini Theater",
+  capacity: 50
 };
 
 describe("parseRoomAvailability", () => {
@@ -64,5 +73,30 @@ describe("parseRoomAvailability", () => {
     });
 
     assert.equal(parsed.slots.find((slot) => slot.hour === 9)?.status, "unavailable");
+  });
+
+  it("marks manual-request-only rooms unavailable by default", () => {
+    const response: LibraryGetRoomResponse = {
+      status: 200,
+      message: "OK",
+      data: {
+        normalRoomGroupDates: [{ FROM_TIME: 8, TO_TIME: 12, ROOM_ID: 108 }],
+        room: [],
+        roomOther: [{ RES_HOUR: 11 }, { RES_HOUR: 12 }],
+        notAvailableRoomDates: [],
+        canAvailableRoomDates: []
+      }
+    };
+
+    const parsed = parseRoomAvailability({
+      room: manualRequestOnlyRoom,
+      date: "20260609",
+      response,
+      fetchedAt: "2026-06-05T04:45:58.000Z",
+      cached: false
+    });
+
+    assert.equal(parsed.slots.find((slot) => slot.hour === 8)?.status, "unavailable");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 11)?.status, "occupied");
   });
 });

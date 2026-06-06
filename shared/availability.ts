@@ -3,7 +3,7 @@ import type {
   ReservableRoom,
   RoomAvailability,
   SlotStatus
-} from "../shared/types";
+} from "./types";
 
 export interface LibraryGetRoomResponse {
   status: number;
@@ -76,7 +76,8 @@ export function parseRoomAvailability({
     const status = getSlotStatus(hour, {
       reservationId,
       occupiedHours,
-      unavailableHours
+      unavailableHours,
+      defaultUnavailable: isManualRequestOnlyRoom(room)
     });
 
     slots.push({
@@ -106,6 +107,7 @@ function getSlotStatus(
     reservationId?: number;
     occupiedHours: Set<number>;
     unavailableHours: Set<number>;
+    defaultUnavailable: boolean;
   }
 ): SlotStatus {
   if (context.reservationId) {
@@ -120,7 +122,15 @@ function getSlotStatus(
     return "unavailable";
   }
 
+  if (context.defaultUnavailable) {
+    return "unavailable";
+  }
+
   return "available";
+}
+
+function isManualRequestOnlyRoom(room: ReservableRoom): boolean {
+  return room.id === 108 || room.id === 110;
 }
 
 function normalizeHour(value: unknown, fallback: number): number {

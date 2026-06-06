@@ -16,5 +16,13 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["api", "src", "server", "shared", "vite.config.ts"]
+  "include": [
+    "api",
+    "extension",
+    "src",
+    "server",
+    "shared",
+    "vite.config.ts",
+    "vite.extension.config.ts"
+  ]
 }
