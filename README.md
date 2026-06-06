@@ -16,6 +16,20 @@ GIST 도서관 공식 시설 예약 페이지에 예약 도우미 UI를 추가�
 - 내 예약 달력 보기
 - 예약 취소 전 확인
 
+## 서비스 이용 예시
+
+공식 예약 페이지 위에 예약 도우미 패널이 뜨고, 전체 호실의 날짜별 예약 상태를 한 화면에서 확인할 수 있습니다.
+
+![예약 현황 화면](./docs/readme-assets/availability-matrix.png)
+
+내 예약은 목록으로 확인하고, 각 예약 항목에서 바로 취소할 수 있습니다.
+
+![내 예약 목록 화면](./docs/readme-assets/my-reservations-list.png)
+
+달력 보기에서는 날짜별 예약 분포와 연속 예약 시간을 함께 확인할 수 있습니다.
+
+![내 예약 달력 화면](./docs/readme-assets/my-reservations-calendar.png)
+
 ## 동작 범위
 
 확장 프로그램은 아래 도메인에서만 실행됩니다.
