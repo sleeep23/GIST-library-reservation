@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
-    "test": "tsx --test server/*.test.ts",
+    "build:extension": "tsc --noEmit && vite build --config vite.extension.config.ts",
+    "dev:extension": "vite build --watch --config vite.extension.config.ts",
+    "package:extension": "node scripts/package-extension.mjs",
+    "test": "tsx --test server/*.test.ts extension/content/*.test.ts extension/panel/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

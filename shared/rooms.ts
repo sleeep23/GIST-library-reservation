@@ -1,4 +1,4 @@
-import type { ReservableRoom } from "../shared/types";
+import type { ReservableRoom } from "./types";
 
 const makeRooms = (
   roomNos: number[],

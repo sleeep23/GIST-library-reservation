@@ -10,3 +10,16 @@ dist/
 *.webarchive
 docs/adr
 CONTEXT.md
+context.md
+.agents/
+.codex/
+
+# Local planning, review, and store-submission materials.
+docs/EXTENSION_PLAN.md
+docs/EXTENSION_DEV.md
+docs/CHROME_WEB_STORE_RELEASE.md
+docs/PRIVACY_POLICY.md
+docs/store-assets/
+docs/VERCEL_DEPLOYMENT.md
+docs/DEPLOYMENT_SECURITY_REVIEW.md
+docs/images/

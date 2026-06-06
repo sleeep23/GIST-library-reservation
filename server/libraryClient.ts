@@ -1,6 +1,12 @@
-import { parseRoomAvailability } from "./availability";
-import { addDaysYmd, monthStartYmd, nextMonthStartYmd, todayYmd } from "./dateUtils";
-import { reservableRooms, roomById } from "./rooms";
+import { parseRoomAvailability } from "../shared/availability";
+import {
+  addDaysYmd,
+  monthStartYmd,
+  nextMonthStartYmd,
+  todayYmd
+} from "../shared/dateUtils";
+import { reservableRooms, roomById } from "../shared/rooms";
+import type { LibraryGetRoomResponse } from "../shared/availability";
 import type {
   AvailabilityResponse,
   MyReservation,
@@ -10,7 +16,6 @@ import type {
   RoomAvailability,
   SessionResponse
 } from "../shared/types";
-import type { LibraryGetRoomResponse } from "./availability";
 
 const API_BASE_URL = "https://library.gist.ac.kr:8443";
 const CACHE_TTL_MS = 60_000;
