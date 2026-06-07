@@ -350,6 +350,7 @@ button {
 .table-scroll {
   width: 100%;
   overflow: auto;
+  scroll-padding-bottom: 36px;
 }
 
 .loading-table {
@@ -396,6 +397,7 @@ button {
   min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  margin-bottom: 36px;
   table-layout: fixed;
 }
 

@@ -1,6 +1,8 @@
 import {
+  compareOperatingHours,
   type LibraryGetRoomResponse,
-  parseRoomAvailability
+  parseRoomAvailability,
+  sortAvailabilityHours
 } from "../../shared/availability";
 import {
   addDaysYmd,
@@ -133,7 +135,7 @@ export async function getExtensionAvailability(
   return {
     availability: {
       date,
-      hours: [...hourSet].sort((a, b) => a - b),
+      hours: sortAvailabilityHours([...hourSet]),
       rooms: roomAvailability.map((item) => item.room),
       roomAvailability,
       fetchedAt: new Date().toISOString()
@@ -522,7 +524,7 @@ function normalizeMyReservations(items: LibraryMyReservationItem[]): MyReservati
       }
 
       if (a.hour !== b.hour) {
-        return a.hour - b.hour;
+        return compareOperatingHours(a.hour, b.hour);
       }
 
       return a.roomNo - b.roomNo;

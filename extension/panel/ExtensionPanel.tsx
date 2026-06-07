@@ -10,6 +10,13 @@ import {
   X
 } from "lucide-react";
 import React from "react";
+import {
+  areConsecutiveOperatingHours,
+  compareOperatingHours,
+  DEFAULT_AVAILABILITY_HOURS,
+  getOperatingHourSortValue,
+  normalizeDisplayHour
+} from "../../shared/availability";
 import { addDaysYmd, isPastReservationHour, todayYmd } from "../../shared/dateUtils";
 import { reservableRooms } from "../../shared/rooms";
 import type {
@@ -903,7 +910,7 @@ function AvailabilityMatrix({
   const dragClickSuppressedRef = React.useRef(false);
   const hours = availability.hours.length
     ? availability.hours
-    : Array.from({ length: 16 }, (_, index) => index + 8);
+    : DEFAULT_AVAILABILITY_HOURS;
   const dragSelectionSlots = React.useMemo(
     () =>
       dragSelection
@@ -1119,6 +1126,7 @@ function AvailabilityMatrix({
           ))}
         </tbody>
       </table>
+      <div className="glra-table-bottom-spacer" aria-hidden="true" />
       {loading ? <LoadingOverlay message="예약 현황 업데이트 중" /> : null}
     </div>
   );
@@ -1445,11 +1453,15 @@ function groupCalendarReservations(reservations: MyReservation[]) {
   };
 
   for (const reservation of sortedReservations) {
+    const previousReservation =
+      currentGroup?.reservations[currentGroup.reservations.length - 1] ?? null;
+
     if (
       currentGroup &&
+      previousReservation &&
       currentGroup.date === reservation.date &&
       currentGroup.roomId === reservation.roomId &&
-      currentGroup.endHour === reservation.hour
+      areConsecutiveOperatingHours(previousReservation.hour, reservation.hour)
     ) {
       currentGroup.endHour = reservation.hour + 1;
       currentGroup.reservations.push(reservation);
@@ -1517,7 +1529,11 @@ function compareReservationsForCalendar(a: MyReservation, b: MyReservation) {
     return a.date.localeCompare(b.date);
   }
 
-  return a.roomId - b.roomId || a.hour - b.hour || a.roomNo - b.roomNo;
+  return (
+    a.roomId - b.roomId ||
+    compareOperatingHours(a.hour, b.hour) ||
+    a.roomNo - b.roomNo
+  );
 }
 
 function compareSlots(a: ReservationSlot, b: ReservationSlot) {
@@ -1525,7 +1541,11 @@ function compareSlots(a: ReservationSlot, b: ReservationSlot) {
     return a.date.localeCompare(b.date);
   }
 
-  return a.roomId - b.roomId || a.hour - b.hour || a.roomNo - b.roomNo;
+  return (
+    a.roomId - b.roomId ||
+    compareOperatingHours(a.hour, b.hour) ||
+    a.roomNo - b.roomNo
+  );
 }
 
 function getActionResultNotice(
@@ -1743,7 +1763,11 @@ function getReserveSelectionError(slots: ReservationSlot[]) {
     const previousSlot = sortedSlots[index - 1];
     const currentSlot = sortedSlots[index];
 
-    if (!previousSlot || !currentSlot || currentSlot.hour !== previousSlot.hour + 1) {
+    if (
+      !previousSlot ||
+      !currentSlot ||
+      !areConsecutiveOperatingHours(previousSlot.hour, currentSlot.hour)
+    ) {
       return "연속된 시간대만 한 번에 예약할 수 있습니다.";
     }
   }
@@ -1763,11 +1787,26 @@ function getMatrixSelectionSlots(
     return [];
   }
 
-  const startHour = Math.min(selection.anchorHour, selection.currentHour);
-  const endHour = Math.max(selection.anchorHour, selection.currentHour);
+  const orderedHours = availability.hours.length
+    ? availability.hours
+    : DEFAULT_AVAILABILITY_HOURS;
+  const anchorIndex = orderedHours.findIndex(
+    (hour) => hour === selection.anchorHour
+  );
+  const currentIndex = orderedHours.findIndex(
+    (hour) => hour === selection.currentHour
+  );
+
+  if (anchorIndex < 0 || currentIndex < 0) {
+    return [];
+  }
+
+  const startIndex = Math.min(anchorIndex, currentIndex);
+  const endIndex = Math.max(anchorIndex, currentIndex);
+  const selectedHours = orderedHours.slice(startIndex, endIndex + 1);
   const slots: ReservationSlot[] = [];
 
-  for (let hour = startHour; hour <= endHour; hour += 1) {
+  for (const hour of selectedHours) {
     slots.push(
       slotByRoomHour.get(slotKey(room.id, hour)) ?? placeholderSlot(room, selectedDate, hour)
     );
@@ -1875,11 +1914,18 @@ function formatCreatedAt(value: string): string {
 }
 
 function hourLabel(hour: number): string {
-  return `${String(hour).padStart(2, "0")}:00`;
+  return `${String(normalizeDisplayHour(hour)).padStart(2, "0")}:00`;
 }
 
 function formatHourRange(startHour: number, endHour: number): string {
-  if (endHour <= startHour + 1) {
+  const startSortValue = getOperatingHourSortValue(startHour);
+  const normalizedEndHour = normalizeDisplayHour(endHour);
+  const endSortValue =
+    normalizedEndHour < normalizeDisplayHour(startHour)
+      ? normalizedEndHour + 24
+      : getOperatingHourSortValue(normalizedEndHour);
+
+  if (endSortValue <= startSortValue + 1) {
     return hourLabel(startHour);
   }
 

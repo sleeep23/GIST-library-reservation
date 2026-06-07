@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import { DEFAULT_AVAILABILITY_HOURS } from "../../shared/availability";
 import type {
   AvailabilityResponse,
   ReservationSlot,
@@ -185,7 +186,7 @@ function DailyMatrix({
   const loadingNewDate = Boolean(loadingState && !activeAvailability);
   const hours = activeAvailability?.hours.length
     ? activeAvailability.hours
-    : Array.from({ length: 16 }, (_, index) => index + 8);
+    : DEFAULT_AVAILABILITY_HOURS;
   const rooms = activeAvailability?.rooms.length ? activeAvailability.rooms : filteredRooms;
   const activeSlotByRoomHour = activeAvailability
     ? slotByRoomHour

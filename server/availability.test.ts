@@ -75,6 +75,60 @@ describe("parseRoomAvailability", () => {
     assert.equal(parsed.slots.find((slot) => slot.hour === 9)?.status, "unavailable");
   });
 
+  it("keeps overnight operating hours after late evening hours", () => {
+    const response: LibraryGetRoomResponse = {
+      status: 200,
+      message: "OK",
+      data: {
+        normalRoomGroupDates: [{ FROM_TIME: 22, TO_TIME: 1, ROOM_ID: 220 }],
+        room: [{ RES_ID: 759796, RES_HOUR: 23 }],
+        roomOther: [{ RES_HOUR: 0 }],
+        notAvailableRoomDates: [{ RES_HOUR: 1 }]
+      }
+    };
+
+    const parsed = parseRoomAvailability({
+      room,
+      date: "20260609",
+      response,
+      fetchedAt: "2026-06-05T04:45:58.000Z",
+      cached: false
+    });
+
+    assert.deepEqual(
+      parsed.slots.map((slot) => slot.hour),
+      [22, 23, 0, 1]
+    );
+    assert.equal(parsed.slots.find((slot) => slot.hour === 23)?.status, "own");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.status, "occupied");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 1)?.status, "unavailable");
+  });
+
+  it("normalizes explicit 24 hour API values to midnight slots", () => {
+    const response: LibraryGetRoomResponse = {
+      status: 200,
+      message: "OK",
+      data: {
+        normalRoomGroupDates: [{ FROM_TIME: 8, TO_TIME: 23, ROOM_ID: 220 }],
+        room: [],
+        roomOther: [{ RES_HOUR: 24 }],
+        notAvailableRoomDates: [{ RES_HOUR: 25 }]
+      }
+    };
+
+    const parsed = parseRoomAvailability({
+      room,
+      date: "20260609",
+      response,
+      fetchedAt: "2026-06-05T04:45:58.000Z",
+      cached: false
+    });
+
+    assert.deepEqual(parsed.slots.slice(-2).map((slot) => slot.hour), [0, 1]);
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.status, "occupied");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 1)?.status, "unavailable");
+  });
+
   it("marks manual-request-only rooms unavailable by default", () => {
     const response: LibraryGetRoomResponse = {
       status: 200,
