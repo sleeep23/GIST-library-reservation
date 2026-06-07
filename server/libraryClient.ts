@@ -1,4 +1,8 @@
-import { parseRoomAvailability } from "../shared/availability";
+import {
+  compareOperatingHours,
+  parseRoomAvailability,
+  sortAvailabilityHours
+} from "../shared/availability";
 import {
   addDaysYmd,
   monthStartYmd,
@@ -102,7 +106,7 @@ export async function getAvailability(
 
   return {
     date,
-    hours: [...hourSet].sort((a, b) => a - b),
+    hours: sortAvailabilityHours([...hourSet]),
     rooms: roomAvailability.map((item) => item.room),
     roomAvailability,
     fetchedAt: new Date().toISOString()
@@ -131,7 +135,7 @@ export async function getMyReservations(): Promise<MyReservationsResponse> {
       }
 
       if (a.hour !== b.hour) {
-        return a.hour - b.hour;
+        return compareOperatingHours(a.hour, b.hour);
       }
 
       return a.roomNo - b.roomNo;

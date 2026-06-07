@@ -4,6 +4,7 @@ import type {
   ReservableRoom,
   SlotStatus
 } from "../../shared/types";
+import { normalizeDisplayHour } from "../../shared/availability";
 
 export interface ConfirmationState {
   action: ReservationAction;
@@ -87,7 +88,7 @@ export function formatTime(value: string): string {
 }
 
 export function hourLabel(hour: number): string {
-  return `${String(hour).padStart(2, "0")}:00`;
+  return `${String(normalizeDisplayHour(hour)).padStart(2, "0")}:00`;
 }
 
 export function slotKey(roomId: number, hour: number): string {

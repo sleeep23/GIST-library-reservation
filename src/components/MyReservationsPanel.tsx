@@ -1,4 +1,5 @@
 import React from "react";
+import { compareOperatingHours } from "../../shared/availability";
 import type { MyReservation } from "../../shared/types";
 import type { MyReservationsView } from "../lib/reservationUi";
 import {
@@ -131,7 +132,7 @@ function MyReservationCalendar({
     }
 
     for (const items of map.values()) {
-      items.sort((a, b) => a.hour - b.hour || a.roomNo - b.roomNo);
+      items.sort((a, b) => compareOperatingHours(a.hour, b.hour) || a.roomNo - b.roomNo);
     }
 
     return map;
