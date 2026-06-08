@@ -361,31 +361,32 @@ export function ExtensionPanel({
       return;
     }
 
-    const targetDate = sortedSlots[0]?.date;
+    if (myReservationsState.status === "success") {
+      const reservations = myReservationsState.result.myReservations.reservations;
+      const slotsByDate = groupSlotsByDate(sortedSlots);
+      const monthlyQuota = getReservationQuotaStatus(
+        reservations,
+        sortedSlots[0]?.date ?? todayYmd()
+      );
 
-    if (targetDate) {
-      const quotaStatus =
-        myReservationsState.status === "success"
-          ? getReservationQuotaStatus(
-              myReservationsState.result.myReservations.reservations,
-              targetDate
-            )
-          : null;
+      for (const [targetDate, targetSlots] of slotsByDate) {
+        const quotaStatus = getReservationQuotaStatus(reservations, targetDate);
 
-      if (
-        quotaStatus &&
-        quotaStatus.dailyHours + sortedSlots.length > DAILY_RESERVATION_LIMIT_HOURS
-      ) {
-        setActionNotice({
-          kind: "error",
-          message: `하루 최대 ${DAILY_RESERVATION_LIMIT_HOURS}시간까지만 예약할 수 있습니다.`
-        });
-        return;
+        if (
+          quotaStatus.dailyHours + targetSlots.length >
+          DAILY_RESERVATION_LIMIT_HOURS
+        ) {
+          setActionNotice({
+            kind: "error",
+            message: `하루 최대 ${DAILY_RESERVATION_LIMIT_HOURS}시간까지만 예약할 수 있습니다.`
+          });
+          return;
+        }
       }
 
       if (
-        quotaStatus &&
-        quotaStatus.monthlyHours + sortedSlots.length > MONTHLY_RESERVATION_LIMIT_HOURS
+        monthlyQuota.monthlyHours + sortedSlots.length >
+        MONTHLY_RESERVATION_LIMIT_HOURS
       ) {
         setActionNotice({
           kind: "error",
@@ -770,6 +771,9 @@ function AvailabilityPanel({
         </div>
         <div className="glra-summary-meta">
           <span className="glra-drag-hint">예약 가능 칸을 드래그해 연속 예약</span>
+          {hasNextDayAvailability(availability, selectedDate) ? (
+            <span className="glra-next-day-notice">00시 이후는 다음날 예약</span>
+          ) : null}
           <span className="glra-summary-copy">
             {state.status === "loading"
               ? `${formatDate(state.date)} 조회 중 · ${state.roomCount}개 호실`
@@ -936,6 +940,10 @@ function AvailabilityMatrix({
       ),
     [dragSelectionSlots]
   );
+  const hourDateByHour = React.useMemo(
+    () => getAvailabilityHourDateMap(availability, selectedDate),
+    [availability, selectedDate]
+  );
 
   const completeDragSelection = React.useCallback(() => {
     if (!dragSelection) {
@@ -1030,103 +1038,129 @@ function AvailabilityMatrix({
         setDragSelection(null);
       }}
     >
-      <table className="glra-availability-table">
-        <thead>
-          <tr>
-            <th
-              className={
-                hoveredAxis ? "glra-time-header matrix-hover" : "glra-time-header"
-              }
-            >
-              시간
-            </th>
-            {availability.rooms.map((room) => (
+      <div className="glra-table-scroll">
+        <table className="glra-availability-table">
+          <thead>
+            <tr>
               <th
                 className={
-                  hoveredAxis?.roomId === room.id
-                    ? "glra-room-header column-hover"
-                    : "glra-room-header"
+                  hoveredAxis ? "glra-time-header matrix-hover" : "glra-time-header"
                 }
-                key={room.id}
-                onMouseEnter={() => setHoveredAxis({ roomId: room.id, hour: null })}
               >
-                <span className="glra-room-no">{room.roomNo}</span>
-                <span className="glra-room-group">{shortGroup(room)}</span>
+                시간
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {hours.map((hour) => (
-            <tr key={hour}>
-              <th
-                className={
-                  hoveredAxis?.hour === hour
-                    ? "glra-hour-cell row-hover"
-                    : "glra-hour-cell"
-                }
-                onMouseEnter={() => setHoveredAxis({ roomId: null, hour })}
-              >
-                {hourLabel(hour)}
-              </th>
-              {availability.rooms.map((room) => {
-                const slot =
-                  slotByRoomHour.get(slotKey(room.id, hour)) ??
-                  placeholderSlot(room, selectedDate, hour);
-                const interactive =
-                  slot.status === "available" ||
-                  (slot.status === "own" && Boolean(slot.reservationId));
-                const label = getSlotCellLabel(slot);
-
-                return (
-                  <td
-                    className={getMatrixCellClassName(slot.status, {
-                      active:
-                        hoveredAxis?.roomId === room.id && hoveredAxis?.hour === hour,
-                      column: hoveredAxis?.roomId === room.id,
-                      invalidSelection: dragInvalidSlotKeys.has(slotKey(room.id, hour)),
-                      row: hoveredAxis?.hour === hour,
-                      selected: dragSelectedSlotKeys.has(slotKey(room.id, hour))
-                    })}
-                    key={`${room.id}-${hour}`}
-                    title={`${formatDate(selectedDate)} ${room.roomNo}호 ${hourLabel(hour)} ${statusLabels[slot.status]}`}
-                    aria-label={`${formatDate(selectedDate)} ${room.roomNo}호 ${hourLabel(hour)} ${statusLabels[slot.status]}`}
-                    onMouseEnter={() => setHoveredAxis({ roomId: room.id, hour })}
-                    onPointerDown={(event) => handleSlotPointerDown(event, slot)}
-                    onPointerEnter={() => handleSlotPointerEnter(slot)}
-                    onPointerUp={handleSlotPointerUp}
-                  >
-                    {interactive ? (
-                      <button
-                        className="glra-slot-action"
-                        type="button"
-                        disabled={loading}
-                        onFocus={() => setHoveredAxis({ roomId: room.id, hour })}
-                        onBlur={() => setHoveredAxis(null)}
-                        onClick={(event) => {
-                          if (dragClickSuppressedRef.current) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            dragClickSuppressedRef.current = false;
-                            return;
-                          }
-
-                          onSlotClick(slot);
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <span>{label}</span>
-                    )}
-                  </td>
-                );
-              })}
+              {availability.rooms.map((room) => (
+                <th
+                  className={
+                    hoveredAxis?.roomId === room.id
+                      ? "glra-room-header column-hover"
+                      : "glra-room-header"
+                  }
+                  key={room.id}
+                  onMouseEnter={() => setHoveredAxis({ roomId: room.id, hour: null })}
+                >
+                  <span className="glra-room-no">{room.roomNo}</span>
+                  <span className="glra-room-group">{shortGroup(room)}</span>
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="glra-table-bottom-spacer" aria-hidden="true" />
+          </thead>
+          <tbody>
+            {hours.map((hour, index) => {
+              const rowDate = hourDateByHour.get(hour) ?? selectedDate;
+              const previousHour = hours[index - 1];
+              const previousRowDate =
+                typeof previousHour === "number"
+                  ? (hourDateByHour.get(previousHour) ?? selectedDate)
+                  : selectedDate;
+              const isNextDayRow = rowDate !== selectedDate;
+              const isNextDayStart = isNextDayRow && previousRowDate === selectedDate;
+
+              return (
+                <tr
+                  className={
+                    isNextDayStart
+                      ? "glra-next-day-row glra-next-day-start"
+                      : isNextDayRow
+                        ? "glra-next-day-row"
+                        : undefined
+                  }
+                  key={hour}
+                >
+                  <th
+                    className={
+                      hoveredAxis?.hour === hour
+                        ? "glra-hour-cell row-hover"
+                        : "glra-hour-cell"
+                    }
+                    onMouseEnter={() => setHoveredAxis({ roomId: null, hour })}
+                  >
+                    <span className="glra-hour-label">{hourLabel(hour)}</span>
+                    {isNextDayRow ? (
+                      <span className="glra-hour-next-day">다음날</span>
+                    ) : null}
+                  </th>
+                  {availability.rooms.map((room) => {
+                    const slot =
+                      slotByRoomHour.get(slotKey(room.id, hour)) ??
+                      placeholderSlot(room, rowDate, hour, selectedDate);
+                    const interactive =
+                      slot.status === "available" ||
+                      (slot.status === "own" && Boolean(slot.reservationId));
+                    const label = getSlotCellLabel(slot);
+
+                    return (
+                      <td
+                        className={getMatrixCellClassName(slot.status, {
+                          active:
+                            hoveredAxis?.roomId === room.id && hoveredAxis?.hour === hour,
+                          column: hoveredAxis?.roomId === room.id,
+                          invalidSelection: dragInvalidSlotKeys.has(
+                            slotKey(room.id, hour)
+                          ),
+                          row: hoveredAxis?.hour === hour,
+                          selected: dragSelectedSlotKeys.has(slotKey(room.id, hour))
+                        })}
+                        key={`${room.id}-${hour}`}
+                        title={`${formatDate(slot.date)} ${room.roomNo}호 ${hourLabel(hour)} ${statusLabels[slot.status]}`}
+                        aria-label={`${formatDate(slot.date)} ${room.roomNo}호 ${hourLabel(hour)} ${statusLabels[slot.status]}`}
+                        onMouseEnter={() => setHoveredAxis({ roomId: room.id, hour })}
+                        onPointerDown={(event) => handleSlotPointerDown(event, slot)}
+                        onPointerEnter={() => handleSlotPointerEnter(slot)}
+                        onPointerUp={handleSlotPointerUp}
+                      >
+                        {interactive ? (
+                          <button
+                            className="glra-slot-action"
+                            type="button"
+                            disabled={loading}
+                            onFocus={() => setHoveredAxis({ roomId: room.id, hour })}
+                            onBlur={() => setHoveredAxis(null)}
+                            onClick={(event) => {
+                              if (dragClickSuppressedRef.current) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                dragClickSuppressedRef.current = false;
+                                return;
+                              }
+
+                              onSlotClick(slot);
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ) : (
+                          <span>{label}</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {loading ? <LoadingOverlay message="예약 현황 업데이트 중" /> : null}
     </div>
   );
@@ -1159,7 +1193,7 @@ function AvailabilityLoadingFrame({
 
 function LoadingOverlay({ message }: { message: string }) {
   return (
-    <div className="glra-loading-overlay">
+    <div className="glra-loading-overlay" role="status" aria-live="polite">
       <div className="glra-loading-card">
         <span className="glra-spinner" aria-hidden="true" />
         <strong>{message}</strong>
@@ -1589,8 +1623,10 @@ function formatConfirmationTarget(confirmation: ConfirmationState) {
     return "";
   }
 
+  const firstDisplayDate = getSlotDisplayDate(firstSlot);
   const sameRoomAndDate = sortedSlots.every(
-    (slot) => slot.date === firstSlot.date && slot.roomId === firstSlot.roomId
+    (slot) =>
+      getSlotDisplayDate(slot) === firstDisplayDate && slot.roomId === firstSlot.roomId
   );
 
   if (!sameRoomAndDate) {
@@ -1599,7 +1635,8 @@ function formatConfirmationTarget(confirmation: ConfirmationState) {
 
   const startHour = sortedSlots[0]?.hour ?? firstSlot.hour;
   const endHour = (sortedSlots[sortedSlots.length - 1]?.hour ?? firstSlot.hour) + 1;
-  const duration = endHour - startHour;
+  const duration =
+    getOperatingHourSortValue(endHour) - getOperatingHourSortValue(startHour);
   const durationText = duration > 1 ? ` (${duration}시간)` : "";
 
   return `${formatDate(firstSlot.date)} ${firstSlot.roomNo}호 ${formatHourRange(
@@ -1715,12 +1752,14 @@ function getPanelStatus(authSource: AuthSource | null): string {
 function placeholderSlot(
   room: ReservableRoom,
   date: string,
-  hour: number
+  hour: number,
+  displayDate?: string
 ): ReservationSlot {
   return {
     roomId: room.id,
     roomNo: room.roomNo,
     date,
+    ...(displayDate && displayDate !== date ? { displayDate } : {}),
     hour,
     status: "unavailable"
   };
@@ -1749,9 +1788,13 @@ function getReserveSelectionError(slots: ReservationSlot[]) {
     return "연속 예약은 예약 가능한 시간만 선택할 수 있습니다.";
   }
 
+  const firstDisplayDate = getSlotDisplayDate(firstSlot);
+
   if (
     slots.some(
-      (slot) => slot.date !== firstSlot.date || slot.roomId !== firstSlot.roomId
+      (slot) =>
+        getSlotDisplayDate(slot) !== firstDisplayDate ||
+        slot.roomId !== firstSlot.roomId
     )
   ) {
     return "연속 예약은 같은 호실 안에서만 선택할 수 있습니다.";
@@ -1807,8 +1850,10 @@ function getMatrixSelectionSlots(
   const slots: ReservationSlot[] = [];
 
   for (const hour of selectedHours) {
+    const slotDate = getAvailabilityHourDate(availability, selectedDate, hour);
     slots.push(
-      slotByRoomHour.get(slotKey(room.id, hour)) ?? placeholderSlot(room, selectedDate, hour)
+      slotByRoomHour.get(slotKey(room.id, hour)) ??
+        placeholderSlot(room, slotDate, hour, selectedDate)
     );
   }
 
@@ -1875,6 +1920,60 @@ function shortGroup(room: ReservableRoom): string {
 
 function slotKey(roomId: number, hour: number): string {
   return `${roomId}:${hour}`;
+}
+
+function getSlotDisplayDate(slot: ReservationSlot): string {
+  return slot.displayDate ?? slot.date;
+}
+
+function groupSlotsByDate(slots: ReservationSlot[]): Map<string, ReservationSlot[]> {
+  const groups = new Map<string, ReservationSlot[]>();
+
+  for (const slot of slots) {
+    const group = groups.get(slot.date) ?? [];
+    group.push(slot);
+    groups.set(slot.date, group);
+  }
+
+  return groups;
+}
+
+function hasNextDayAvailability(
+  availability: AvailabilityResponse | null,
+  selectedDate: string
+): boolean {
+  return Boolean(
+    availability?.roomAvailability.some((roomAvailability) =>
+      roomAvailability.slots.some(
+        (slot) => getSlotDisplayDate(slot) === selectedDate && slot.date !== selectedDate
+      )
+    )
+  );
+}
+
+function getAvailabilityHourDateMap(
+  availability: AvailabilityResponse,
+  selectedDate: string
+): Map<number, string> {
+  const map = new Map<number, string>();
+
+  for (const roomAvailability of availability.roomAvailability) {
+    for (const slot of roomAvailability.slots) {
+      if (getSlotDisplayDate(slot) === selectedDate) {
+        map.set(slot.hour, slot.date);
+      }
+    }
+  }
+
+  return map;
+}
+
+function getAvailabilityHourDate(
+  availability: AvailabilityResponse,
+  selectedDate: string,
+  hour: number
+): string {
+  return getAvailabilityHourDateMap(availability, selectedDate).get(hour) ?? selectedDate;
 }
 
 function getRoomIdsKey(rooms: ReservableRoom[]) {

@@ -350,7 +350,6 @@ button {
 .table-scroll {
   width: 100%;
   overflow: auto;
-  scroll-padding-bottom: 36px;
 }
 
 .loading-table {

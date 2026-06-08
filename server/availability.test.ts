@@ -101,6 +101,8 @@ describe("parseRoomAvailability", () => {
     );
     assert.equal(parsed.slots.find((slot) => slot.hour === 23)?.status, "own");
     assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.status, "occupied");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.date, "20260610");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.displayDate, "20260609");
     assert.equal(parsed.slots.find((slot) => slot.hour === 1)?.status, "unavailable");
   });
 
@@ -126,7 +128,76 @@ describe("parseRoomAvailability", () => {
 
     assert.deepEqual(parsed.slots.slice(-2).map((slot) => slot.hour), [0, 1]);
     assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.status, "occupied");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.date, "20260610");
     assert.equal(parsed.slots.find((slot) => slot.hour === 1)?.status, "unavailable");
+  });
+
+  it("maps canAvailableRoomDates ranges to midnight slots after late evening", () => {
+    const response: LibraryGetRoomResponse = {
+      status: 200,
+      message: "OK",
+      data: {
+        normalRoomGroupDates: [{ FROM_TIME: 8, TO_TIME: 23, ROOM_ID: 220 }],
+        room: [],
+        roomOther: [],
+        notAvailableRoomDates: [],
+        canAvailableRoomDates: [
+          {
+            FROM_TIME: 0,
+            TO_TIME: 1,
+            RES_DT: "2026-06-08T15:00:00.000+00:00"
+          }
+        ]
+      }
+    };
+
+    const parsed = parseRoomAvailability({
+      room,
+      date: "20260608",
+      response,
+      fetchedAt: "2026-06-05T04:45:58.000Z",
+      cached: false
+    });
+
+    assert.deepEqual(parsed.slots.slice(0, 3).map((slot) => slot.hour), [8, 9, 10]);
+    assert.deepEqual(parsed.slots.slice(-2).map((slot) => slot.hour), [0, 1]);
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.status, "available");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.date, "20260609");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 0)?.displayDate, "20260608");
+    assert.equal(parsed.slots.find((slot) => slot.hour === 1)?.status, "available");
+  });
+
+  it("does not place same-day midnight ranges at the start of the selected day", () => {
+    const response: LibraryGetRoomResponse = {
+      status: 200,
+      message: "OK",
+      data: {
+        normalRoomGroupDates: [{ FROM_TIME: 8, TO_TIME: 8, ROOM_ID: 220 }],
+        room: [],
+        roomOther: [],
+        notAvailableRoomDates: [],
+        canAvailableRoomDates: [
+          {
+            FROM_TIME: 0,
+            TO_TIME: 1,
+            RES_DT: "2026-06-08T15:00:00.000+00:00"
+          }
+        ]
+      }
+    };
+
+    const parsed = parseRoomAvailability({
+      room,
+      date: "20260609",
+      response,
+      fetchedAt: "2026-06-05T04:45:58.000Z",
+      cached: false
+    });
+
+    assert.deepEqual(
+      parsed.slots.map((slot) => slot.hour),
+      [8]
+    );
   });
 
   it("marks manual-request-only rooms unavailable by default", () => {

@@ -76,9 +76,9 @@
   box-shadow: 0 -18px 48px rgba(20, 35, 50, 0.2);
   display: flex;
   flex-direction: column;
-  height: min(72vh, 720px);
+  height: min(74vh, 740px);
   left: 24px;
-  max-height: min(72vh, 720px);
+  max-height: min(74vh, 740px);
   min-width: 0;
   overflow: hidden;
   position: fixed;
@@ -582,24 +582,41 @@
   white-space: nowrap;
 }
 
+.glra-next-day-notice {
+  background: #fff7df;
+  border: 1px solid #ead28d;
+  border-radius: 999px;
+  color: #75520d;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
 .glra-table-frame {
   background: #ffffff;
   border: 1px solid #d6e0e7;
   border-radius: 8px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.glra-table-scroll {
   max-height: min(42vh, 360px);
   max-width: 100%;
   min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  position: relative;
-  scroll-padding-bottom: 36px;
 }
 
-.glra-table-frame.loading {
-  overflow: hidden;
-}
-
-.glra-table-frame.loading .glra-availability-table {
+.glra-table-frame.loading .glra-table-scroll,
+.glra-my-panel.loading .glra-reservation-list,
+.glra-my-panel.loading .glra-my-calendar,
+.glra-my-panel.loading .glra-empty-state {
   filter: blur(1.4px);
   pointer-events: none;
 }
@@ -638,14 +655,6 @@
   font-size: 11px;
   min-width: 100%;
   table-layout: fixed;
-  width: max-content;
-}
-
-.glra-table-bottom-spacer {
-  background: #ffffff;
-  display: block;
-  height: 44px;
-  min-width: 100%;
   width: max-content;
 }
 
@@ -695,6 +704,29 @@
   box-shadow: 1px 0 0 #d8e2e9;
   color: #526678;
   font-weight: 800;
+}
+
+.glra-next-day-start .glra-hour-cell,
+.glra-next-day-start .glra-slot-cell {
+  border-top: 2px solid #96a9b9;
+}
+
+.glra-next-day-row .glra-hour-cell {
+  background: #fffaf0;
+  color: #75520d;
+}
+
+.glra-hour-label,
+.glra-hour-next-day {
+  display: block;
+  line-height: 1.15;
+}
+
+.glra-hour-next-day {
+  color: #8a681b;
+  font-size: 9px;
+  font-weight: 900;
+  margin-top: 2px;
 }
 
 .glra-room-no,
@@ -856,13 +888,6 @@
   gap: 12px;
   min-width: 0;
   position: relative;
-}
-
-.glra-my-panel.loading .glra-reservation-list,
-.glra-my-panel.loading .glra-my-calendar,
-.glra-my-panel.loading .glra-empty-state {
-  filter: blur(1.2px);
-  pointer-events: none;
 }
 
 .glra-my-toolbar {
