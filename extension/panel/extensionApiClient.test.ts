@@ -102,10 +102,14 @@ describe("findLibraryUserIdCandidate", () => {
 
 describe("getExtensionAvailability", () => {
   it("combines multiple getRoom responses into one availability response", async () => {
-    const requestedRoomIds: number[] = [];
+    const requests: Array<{ date: string; roomId: number }> = [];
     globalThis.fetch = async (_input, init) => {
-      const payload = JSON.parse(String(init?.body)) as { ROOM_ID: number };
-      requestedRoomIds.push(payload.ROOM_ID);
+      const payload = JSON.parse(String(init?.body)) as {
+        RES_YYYYMMDD: string;
+        ROOM_ID: number;
+      };
+      requests.push({ date: payload.RES_YYYYMMDD, roomId: payload.ROOM_ID });
+      const isNextDayLookup = payload.RES_YYYYMMDD === "20260606";
 
       return jsonResponse({
         status: 200,
@@ -114,18 +118,37 @@ describe("getExtensionAvailability", () => {
           normalRoomGroupDates: [
             { FROM_TIME: 8, TO_TIME: 9, ROOM_ID: payload.ROOM_ID }
           ],
-          room: payload.ROOM_ID === 220 ? [{ RES_ID: 1, RES_HOUR: 8 }] : [],
-          roomOther: payload.ROOM_ID === 221 ? [{ RES_HOUR: 9 }] : [],
-          notAvailableRoomDates: []
+          room:
+            !isNextDayLookup && payload.ROOM_ID === 220
+              ? [{ RES_ID: 1, RES_HOUR: 8 }]
+              : [],
+          roomOther:
+            !isNextDayLookup && payload.ROOM_ID === 221 ? [{ RES_HOUR: 9 }] : [],
+          notAvailableRoomDates: [],
+          canAvailableRoomDates:
+            isNextDayLookup && payload.ROOM_ID === 220
+              ? [
+                  {
+                    FROM_TIME: 0,
+                    TO_TIME: 1,
+                    RES_DT: "2026-06-05T15:00:00.000+00:00"
+                  }
+                ]
+              : []
         }
       });
     };
 
     const result = await getExtensionAvailability("20260605", [220, 221]);
 
-    assert.deepEqual(requestedRoomIds, [220, 221]);
+    assert.deepEqual(
+      requests
+        .map((request) => `${request.date}:${request.roomId}`)
+        .sort(),
+      ["20260605:220", "20260605:221", "20260606:220", "20260606:221"]
+    );
     assert.equal(result.authSource, "site-cookie");
-    assert.deepEqual(result.availability.hours, [8, 9]);
+    assert.deepEqual(result.availability.hours, [8, 9, 0, 1]);
     assert.deepEqual(
       result.availability.rooms.map((room) => room.id),
       [220, 221]
@@ -139,6 +162,16 @@ describe("getExtensionAvailability", () => {
       result.availability.roomAvailability[1]?.slots.find((slot) => slot.hour === 9)
         ?.status,
       "occupied"
+    );
+    assert.equal(
+      result.availability.roomAvailability[0]?.slots.find((slot) => slot.hour === 0)
+        ?.status,
+      "available"
+    );
+    assert.equal(
+      result.availability.roomAvailability[0]?.slots.find((slot) => slot.hour === 0)
+        ?.date,
+      "20260606"
     );
   });
 
@@ -162,7 +195,7 @@ describe("getExtensionAvailability", () => {
     await getExtensionAvailability("20260605", [220]);
     await getExtensionAvailability("20260605", [220], { force: true });
 
-    assert.equal(requestCount, 2);
+    assert.equal(requestCount, 4);
   });
 
   it("sends a storage token as a bearer token", async () => {
@@ -261,6 +294,52 @@ describe("submitExtensionReservationAction", () => {
     assert.equal(calls[1]?.path.endsWith("/work/makeFacilityreservation"), true);
     assert.equal(calls[1]?.payload.CREATE_ID, "test");
     assert.equal(calls[2]?.path.endsWith("/work/getRoom"), true);
+  });
+
+  it("reserves next-day midnight slots from the previous day's availability table", async () => {
+    const calls: Array<{ path: string; payload: Record<string, unknown> }> = [];
+    installWindow(storageWith({ token: jwt }), storageWith({}));
+    globalThis.fetch = async (input, init) => {
+      const path = String(input);
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      calls.push({ path, payload });
+
+      if (path.endsWith("/work/getMyReservation")) {
+        return jsonResponse({ status: 200, message: "OK", data: [] });
+      }
+
+      if (path.endsWith("/work/getRoom")) {
+        return jsonResponse({
+          status: 200,
+          message: "OK",
+          data: {
+            normalRoomGroupDates: [{ FROM_TIME: 8, TO_TIME: 23, ROOM_ID: 228 }],
+            room: [{ RES_ID: 9, RES_HOUR: 0 }],
+            roomOther: [],
+            notAvailableRoomDates: []
+          }
+        });
+      }
+
+      return jsonResponse({ status: 200, message: "OK" });
+    };
+
+    const result = await submitExtensionReservationAction("reserve", {
+      roomId: 228,
+      roomNo: 228,
+      date: "29990102",
+      displayDate: "29990101",
+      hour: 0,
+      status: "available"
+    });
+
+    assert.equal(result.response.success, true);
+    assert.equal(result.response.slot.status, "own");
+    assert.equal(calls[1]?.path.endsWith("/work/makeFacilityreservation"), true);
+    assert.equal(calls[1]?.payload.RES_YYYYMMDD, "29990102");
+    assert.equal(calls[1]?.payload.RES_HOUR, 0);
+    assert.equal(calls[2]?.path.endsWith("/work/getRoom"), true);
+    assert.equal(calls[2]?.payload.RES_YYYYMMDD, "29990102");
   });
 
   it("rejects reservations when the daily limit is already reached", async () => {

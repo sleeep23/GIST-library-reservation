@@ -13,6 +13,7 @@ export interface ReservationSlot {
   roomId: number;
   roomNo: number;
   date: string;
+  displayDate?: string;
   hour: number;
   status: SlotStatus;
   reservationId?: number;

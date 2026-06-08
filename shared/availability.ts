@@ -4,6 +4,7 @@ import type {
   RoomAvailability,
   SlotStatus
 } from "./types";
+import { addDaysYmd } from "./dateUtils";
 
 export interface LibraryGetRoomResponse {
   status: number;
@@ -27,6 +28,10 @@ export interface LibraryGetRoomResponse {
     }>;
     canAvailableRoomDates?: Array<{
       RES_HOUR?: number;
+      FROM_TIME?: number;
+      TO_TIME?: number;
+      RES_DT?: string;
+      RES_YYYYMMDD?: string;
     }>;
   };
 }
@@ -79,10 +84,12 @@ export function parseRoomAvailability({
     }
   }
 
-  for (const item of response.data?.canAvailableRoomDates ?? []) {
-    if (typeof item.RES_HOUR === "number") {
-      explicitlyAvailableHours.add(normalizeDisplayHour(item.RES_HOUR));
-    }
+  for (const hour of collectExplicitlyAvailableHours(
+    response.data?.canAvailableRoomDates ?? [],
+    date,
+    fromHour
+  )) {
+    explicitlyAvailableHours.add(hour);
   }
 
   const slots: ReservationSlot[] = [];
@@ -96,9 +103,11 @@ export function parseRoomAvailability({
 
   for (const hour of hours) {
     const reservationId = ownByHour.get(hour);
+    const slotDate = getReservationDateForOperatingHour(date, hour, fromHour);
     const status = getSlotStatus(hour, {
       reservationId,
       occupiedHours,
+      explicitlyAvailableHours,
       unavailableHours,
       defaultUnavailable: isManualRequestOnlyRoom(room)
     });
@@ -106,7 +115,8 @@ export function parseRoomAvailability({
     slots.push({
       roomId: room.id,
       roomNo: room.roomNo,
-      date,
+      date: slotDate,
+      ...(slotDate !== date ? { displayDate: date } : {}),
       hour,
       status,
       ...(reservationId ? { reservationId } : {})
@@ -129,6 +139,7 @@ function getSlotStatus(
   context: {
     reservationId?: number;
     occupiedHours: Set<number>;
+    explicitlyAvailableHours: Set<number>;
     unavailableHours: Set<number>;
     defaultUnavailable: boolean;
   }
@@ -145,6 +156,10 @@ function getSlotStatus(
     return "unavailable";
   }
 
+  if (context.explicitlyAvailableHours.has(hour)) {
+    return "available";
+  }
+
   if (context.defaultUnavailable) {
     return "unavailable";
   }
@@ -158,6 +173,86 @@ function isManualRequestOnlyRoom(room: ReservableRoom): boolean {
 
 function normalizeHour(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) ? value : fallback;
+}
+
+function collectExplicitlyAvailableHours(
+  items: NonNullable<
+    NonNullable<LibraryGetRoomResponse["data"]>["canAvailableRoomDates"]
+  >,
+  date: string,
+  fromHour: number
+): number[] {
+  const hours = new Set<number>();
+
+  for (const item of items) {
+    if (typeof item.RES_HOUR === "number") {
+      const hour = normalizeDisplayHour(item.RES_HOUR);
+
+      if (isScheduleItemForDate(item, date, hour, fromHour)) {
+        hours.add(hour);
+      }
+
+      continue;
+    }
+
+    if (typeof item.FROM_TIME === "number" && typeof item.TO_TIME === "number") {
+      for (const hour of buildOperatingHours(item.FROM_TIME, item.TO_TIME)) {
+        if (isScheduleItemForDate(item, date, hour, fromHour)) {
+          hours.add(hour);
+        }
+      }
+    }
+  }
+
+  return [...hours];
+}
+
+function isScheduleItemForDate(
+  item: { RES_DT?: string; RES_YYYYMMDD?: string },
+  date: string,
+  hour: number,
+  fromHour: number
+): boolean {
+  const scheduleDate = normalizeScheduleDate(item.RES_YYYYMMDD ?? item.RES_DT);
+  return (
+    !scheduleDate ||
+    scheduleDate === getReservationDateForOperatingHour(date, hour, fromHour)
+  );
+}
+
+function normalizeScheduleDate(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (/^\d{8}$/.test(value)) {
+    return value;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  })
+    .format(parsed)
+    .replaceAll("-", "");
+}
+
+export function getReservationDateForOperatingHour(
+  date: string,
+  hour: number,
+  fromHour: number = DEFAULT_OPERATING_START_HOUR
+): string {
+  return normalizeDisplayHour(hour) < normalizeDisplayHour(fromHour)
+    ? addDaysYmd(date, 1)
+    : date;
 }
 
 export function buildOperatingHours(fromHour: number, toHour: number): number[] {

@@ -121,7 +121,9 @@ export async function getExtensionAvailability(
   const roomTasks = uniqueRoomIds
     .map((roomId) => roomById.get(roomId))
     .filter((room): room is NonNullable<typeof room> => Boolean(room))
-    .map((room) => () => getRoomAvailability(date, room.id, authContext, options));
+    .map((room) => () =>
+      getRoomAvailabilityWithNextDayDawnSlots(date, room.id, authContext, options)
+    );
 
   const roomAvailability = await runWithConcurrency(roomTasks, CONCURRENCY_LIMIT);
   const hourSet = new Set<number>();
@@ -221,7 +223,8 @@ async function getRoomAvailability(
   date: string,
   roomId: number,
   authContext: AuthContext,
-  options: { force?: boolean }
+  options: { force?: boolean },
+  displayDate: string = date
 ): Promise<RoomAvailability> {
   const room = roomById.get(roomId);
 
@@ -229,7 +232,7 @@ async function getRoomAvailability(
     throw new Error(`알 수 없는 호실입니다: ${roomId}`);
   }
 
-  const key = cacheKey(date, roomId);
+  const key = cacheKey(date, roomId, displayDate);
   const cached = availabilityCache.get(key);
 
   if (!options.force && cached && cached.expiresAt > Date.now()) {
@@ -248,7 +251,7 @@ async function getRoomAvailability(
   );
   const parsed = parseRoomAvailability({
     room,
-    date,
+    date: displayDate,
     response,
     fetchedAt: new Date().toISOString(),
     cached: false
@@ -260,6 +263,55 @@ async function getRoomAvailability(
   });
 
   return parsed;
+}
+
+async function getRoomAvailabilityWithNextDayDawnSlots(
+  date: string,
+  roomId: number,
+  authContext: AuthContext,
+  options: { force?: boolean }
+): Promise<RoomAvailability> {
+  const baseAvailability = await getRoomAvailability(date, roomId, authContext, options);
+  const nextDate = addDaysYmd(date, 1);
+
+  try {
+    const nextDayAvailability = await getRoomAvailability(
+      nextDate,
+      roomId,
+      authContext,
+      options,
+      date
+    );
+
+    return mergeNextDayDawnSlots(baseAvailability, nextDayAvailability, nextDate);
+  } catch {
+    return baseAvailability;
+  }
+}
+
+function mergeNextDayDawnSlots(
+  baseAvailability: RoomAvailability,
+  nextDayAvailability: RoomAvailability,
+  nextDate: string
+): RoomAvailability {
+  const slotsByHour = new Map<number, ReservationSlot>();
+
+  for (const slot of baseAvailability.slots) {
+    if (slot.date === baseAvailability.date) {
+      slotsByHour.set(slot.hour, slot);
+    }
+  }
+
+  for (const slot of nextDayAvailability.slots) {
+    if (slot.date === nextDate && slot.displayDate === baseAvailability.date) {
+      slotsByHour.set(slot.hour, slot);
+    }
+  }
+
+  return {
+    ...baseAvailability,
+    slots: [...slotsByHour.values()].sort((a, b) => compareOperatingHours(a.hour, b.hour))
+  };
 }
 
 async function makeExtensionReservation(
@@ -286,10 +338,8 @@ async function makeExtensionReservation(
     authContext.accessToken
   );
 
-  invalidateAvailability(slot.date, slot.roomId);
-  const refreshed = await getRoomAvailability(slot.date, slot.roomId, authContext, {
-    force: true
-  });
+  invalidateSlotAvailability(slot);
+  const refreshed = await getSlotVerificationAvailability(slot, authContext);
   const refreshedSlot = requireSlot(refreshed, slot.hour);
 
   if (refreshedSlot.status !== "own") {
@@ -387,10 +437,8 @@ async function cancelExtensionReservation(
     authContext.accessToken
   );
 
-  invalidateAvailability(slot.date, slot.roomId);
-  const refreshed = await getRoomAvailability(slot.date, slot.roomId, authContext, {
-    force: true
-  });
+  invalidateSlotAvailability(slot);
+  const refreshed = await getSlotVerificationAvailability(slot, authContext);
   const refreshedSlot = requireSlot(refreshed, slot.hour);
 
   if (refreshedSlot.status === "own") {
@@ -578,12 +626,42 @@ function requireSlot(availability: RoomAvailability, hour: number): ReservationS
   return slot;
 }
 
-function invalidateAvailability(date: string, roomId: number): void {
-  availabilityCache.delete(cacheKey(date, roomId));
+function invalidateAvailability(
+  date: string,
+  roomId: number,
+  displayDate: string = date
+): void {
+  availabilityCache.delete(cacheKey(date, roomId, displayDate));
 }
 
-function cacheKey(date: string, roomId: number): string {
-  return `${date}:${roomId}`;
+function invalidateSlotAvailability(slot: ReservationSlot): void {
+  const refreshDate = getSlotRefreshDate(slot);
+  invalidateAvailability(slot.date, slot.roomId);
+  invalidateAvailability(refreshDate, slot.roomId);
+  invalidateAvailability(slot.date, slot.roomId, refreshDate);
+}
+
+async function getSlotVerificationAvailability(
+  slot: ReservationSlot,
+  authContext: AuthContext
+): Promise<RoomAvailability> {
+  return getRoomAvailability(
+    slot.date,
+    slot.roomId,
+    authContext,
+    { force: true },
+    getSlotRefreshDate(slot)
+  );
+}
+
+function getSlotRefreshDate(slot: ReservationSlot): string {
+  return slot.displayDate ?? slot.date;
+}
+
+function cacheKey(date: string, roomId: number, displayDate: string = date): string {
+  return displayDate === date
+    ? `${date}:${roomId}`
+    : `${date}:${displayDate}:${roomId}`;
 }
 
 async function runWithConcurrency<T>(
