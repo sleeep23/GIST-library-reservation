@@ -74,6 +74,32 @@ describe("findLibraryTokenCandidate", () => {
 
     assert.equal(candidate, null);
   });
+
+  it("ignores domain names even though they have three dot-separated parts", () => {
+    for (const value of [
+      "gist.ac.kr",
+      JSON.stringify("gist.ac.kr"),
+      JSON.stringify({ accessToken: "gist.ac.kr" })
+    ]) {
+      assert.equal(
+        findLibraryTokenCandidate(storageWith({ domain: value }), storageWith({})),
+        null
+      );
+    }
+  });
+
+  it("requires both the JWT header and payload to be JSON objects", () => {
+    for (const token of [
+      `invalid.${jwt.split(".")[1]}.signature`,
+      `${jwt.split(".")[0]}.invalid.signature`,
+      `${jwt.split(".")[0]}.${btoa("[]")}.signature`
+    ]) {
+      assert.equal(
+        findLibraryTokenCandidate(storageWith({ token }), storageWith({})),
+        null
+      );
+    }
+  });
 });
 
 describe("findLibraryUserIdCandidate", () => {
@@ -198,13 +224,18 @@ describe("getExtensionAvailability", () => {
     assert.equal(requestCount, 4);
   });
 
-  it("sends a storage token as a bearer token", async () => {
-    let authorizationHeader = "";
-    installWindow(storageWith({ auth: JSON.stringify({ accessToken: jwt }) }), storageWith({}));
+  it("sends the JWT instead of a domain and preserves the requested dates", async () => {
+    const authorizationHeaders: string[] = [];
+    const payloads: unknown[] = [];
+    installWindow(
+      storageWith({ domain: "gist.ac.kr" }),
+      storageWith({ auth: JSON.stringify({ accessToken: jwt }) })
+    );
     globalThis.fetch = async (_input, init) => {
-      authorizationHeader = String(
-        (init?.headers as Record<string, string> | undefined)?.Authorization ?? ""
+      authorizationHeaders.push(
+        String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "")
       );
+      payloads.push(JSON.parse(String(init?.body)));
 
       return jsonResponse({
         status: 200,
@@ -218,10 +249,21 @@ describe("getExtensionAvailability", () => {
       });
     };
 
-    const result = await getExtensionAvailability("20260605", [220]);
+    for (const date of ["20261008", "20261012"]) {
+      const result = await getExtensionAvailability(date, [108]);
+      assert.equal(result.authSource, "storage-token");
+    }
 
-    assert.equal(result.authSource, "storage-token");
-    assert.equal(authorizationHeader, `Bearer ${jwt}`);
+    assert.deepEqual(authorizationHeaders, Array(4).fill(`Bearer ${jwt}`));
+    assert.deepEqual(
+      payloads,
+      ["20261008", "20261009", "20261012", "20261013"].map((date) => ({
+        START_DT_YYYYMMDD: "20261001",
+        END_DT_YYYYMMDD: "20261101",
+        ROOM_ID: 108,
+        RES_YYYYMMDD: date
+      }))
+    );
   });
 });
 

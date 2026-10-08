@@ -859,18 +859,27 @@ function isValidUserId(value: string): boolean {
 }
 
 function looksLikeJwt(value: string): boolean {
-  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) {
+    return false;
+  }
+
+  return value.split(".").slice(0, 2).every((part) => {
+    const decoded = decodeJwtPart(part);
+    return decoded !== null && typeof decoded === "object" && !Array.isArray(decoded);
+  });
 }
 
 function decodeJwtPayload(token: string): unknown | null {
-  const payload = token.split(".")[1];
+  return decodeJwtPart(token.split(".")[1]);
+}
 
-  if (!payload) {
+function decodeJwtPart(part: string | undefined): unknown | null {
+  if (!part) {
     return null;
   }
 
   try {
-    const base64 = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const base64 = part.replaceAll("-", "+").replaceAll("_", "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
     return tryParseJson(globalThis.atob(padded));
   } catch {
